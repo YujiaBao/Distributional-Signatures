@@ -307,7 +307,7 @@ def _data_to_nparray(data, vocab, args):
                 'bert-base-uncased', do_lower_case=True)
 
         # add CLS
-        bert_id[0,:] = tokenizer.convert_tokens_to_ids(['[CLS]'])[0]
+        bert_id[:,0] = tokenizer.convert_tokens_to_ids(['[CLS]'])[0]
 
         # add ids (append [SEP])
         sep = tokenizer.convert_tokens_to_ids(['[SEP]'])[0]
