@@ -107,6 +107,10 @@ class META(nn.Module):
         input_dim = int(args.meta_idf) + self.aux.embedding_dim + \
             int(args.meta_w_target) + int(args.meta_iwf)
 
+        if args.meta_ebd:
+            # abalation use distributional signatures with word ebd may fail
+            input_dim += self.ebd_dim
+
         if args.embedding == 'meta':
             self.rnn = RNN(input_dim, 25, 1, True, 0)
 
@@ -181,6 +185,9 @@ class META(nn.Module):
         if self.args.meta_iwf:
             iwf = F.embedding(data['text'], data['iwf']).detach()
             x = torch.cat([x, iwf], dim=-1)
+
+        if self.args.meta_ebd:
+            x = torch.cat([x, ebd], dim=-1)
 
         if self.args.meta_w_target:
             if self.args.meta_target_entropy:

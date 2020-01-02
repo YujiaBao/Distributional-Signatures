@@ -58,7 +58,7 @@ class AUX(nn.Module):
 
         # aux embeddings should only be used with cnn, meta or meta_mlp.
         # concatenate together with word embeddings
-        assert (self.args.embedding in ['cnn', 'meta', 'meta_mlp'])
+        assert (self.args.embedding in ['cnn', 'meta', 'meta_mlp', 'lstmatt'])
         x = torch.cat(results, dim=2)
 
         return x

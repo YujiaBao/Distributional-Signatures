@@ -41,7 +41,9 @@ def parse_args():
                         help=("set true if use bert embeddings "
                               "(only available for sent-level datasets: "
                               "huffpost, fewrel"))
-    parser.add_argument("--bert_path", default=None, type=str,
+    parser.add_argument("--bert_cache_dir", default=None, type=str,
+                        help=("path to the cache_dir of transformers"))
+    parser.add_argument("--pretrained_bert", default=None, type=str,
                         help=("path to the pre-trained bert embeddings."))
 
     # task configuration
@@ -107,11 +109,25 @@ def parse_args():
                         "Note: maml has to be used with classifier=mlp"))
     parser.add_argument("--mlp_hidden", nargs="+", type=int, default=[300, 5],
                         help=("hidden dimension of the proto-net"))
-    parser.add_argument("--maml_innersteps", type=int, default=1)
+    parser.add_argument("--maml_innersteps", type=int, default=10)
     parser.add_argument("--maml_batchsize", type=int, default=10)
     parser.add_argument("--maml_stepsize", type=float, default=1e-1)
     parser.add_argument("--maml_firstorder", action="store_true", default=False,
                         help="truncate higher order gradient")
+
+    # lrd2 configuration
+    parser.add_argument("--lrd2_num_iters", type=int, default=5,
+                        help=("num of Newton steps for LRD2"))
+
+    # induction networks configuration
+    parser.add_argument("--induct_rnn_dim", type=int, default=128,
+                        help=("Uni LSTM dim of induction network's encoder"))
+    parser.add_argument("--induct_hidden_dim", type=int, default=100,
+                        help=("tensor layer dim of induction network's relation"))
+    parser.add_argument("--induct_iter", type=int, default=3,
+                        help=("num of routings"))
+    parser.add_argument("--induct_att_dim", type=int, default=64,
+                        help=("attention projection dim of induction network"))
 
     # aux ebd configuration (for fewrel)
     parser.add_argument("--pos_ebd_dim", type=int, default=5,
@@ -125,6 +141,8 @@ def parse_args():
                         help="path to word vector cache")
     parser.add_argument("--word_vector", type=str, default="wiki.en.vec",
                         help=("Name of pretrained word embeddings."))
+    parser.add_argument("--finetune_ebd", action="store_true", default=False,
+                        help=("Finetune embedding during meta-training"))
 
     # options for the distributional signatures
     parser.add_argument("--meta_idf", action="store_true", default=False,
@@ -137,6 +155,9 @@ def parse_args():
                         help="lambda for computing w_target")
     parser.add_argument("--meta_target_entropy", action="store_true", default=False,
                         help="use inverse entropy to model task-specific importance")
+    parser.add_argument("--meta_ebd", action="store_true", default=False,
+                        help="use word embedding into the meta model "
+                        "(showing that revealing word identity harm performance)")
 
     # training options
     parser.add_argument("--seed", type=int, default=330, help="seed")

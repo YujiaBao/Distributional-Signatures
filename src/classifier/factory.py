@@ -2,7 +2,9 @@ import torch
 from classifier.nn import NN
 from classifier.proto import PROTO
 from classifier.r2d2 import R2D2
+from classifier.lrd2 import LRD2
 from classifier.mlp import MLP
+from classifier.routing import ROUTING
 from dataset.utils import tprint
 
 
@@ -15,6 +17,10 @@ def get_classifier(ebd_dim, args):
         model = PROTO(ebd_dim, args)
     elif args.classifier == 'r2d2':
         model = R2D2(ebd_dim, args)
+    elif args.classifier == 'lrd2':
+        model = LRD2(ebd_dim, args)
+    elif args.classifier == 'routing':
+        model = ROUTING(ebd_dim, args)
     elif args.classifier == 'mlp':
         # detach top layer from rest of MLP
         if args.mode == 'finetune':

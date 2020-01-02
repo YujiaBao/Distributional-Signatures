@@ -22,7 +22,7 @@ class AVG(nn.Module):
             @param weights placeholder used for maml
             @return output: batch_size * embedding_dim
         '''
-        ebd = self.ebd(data)
+        ebd = self.ebd(data, weights)
 
         # count length excluding <pad> and <unk>.
         is_zero = (torch.sum(torch.abs(ebd), dim=2) > 1e-8).float()

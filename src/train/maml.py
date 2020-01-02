@@ -136,6 +136,7 @@ def train(train_data, val_data, model, args):
             total_grad = {'ebd': [], 'clf': []}
 
             for _ in range(args.maml_batchsize):
+                # print('start', flush=True)
                 task = next(sampled_tasks)
 
                 # clone the current initialization
@@ -143,7 +144,10 @@ def train(train_data, val_data, model, args):
                 _copy_weights(model['clf'], fast_model['clf'])
 
                 # get the meta gradient
-                train_one(task, fast_model, args, total_grad)
+                if args.maml_firstorder:
+                    train_one_fomaml(task, fast_model, args, total_grad)
+                else:
+                    train_one(task, fast_model, args, total_grad)
 
             ebd_grad, clf_grad = _meta_update(
                     model, total_grad, opt, task, args.maml_batchsize,
@@ -151,12 +155,10 @@ def train(train_data, val_data, model, args):
             meta_grad_dict['ebd'].append(ebd_grad)
             meta_grad_dict['clf'].append(clf_grad)
 
-
         # evaluate training accuracy
         if ep % 10 == 0:
-            acc, std = test(train_data, model, args,
-                            args.train_episodes * args.maml_batchsize, False,
-                    train_gen.get_epoch())
+            acc, std = test(train_data, model, args, args.val_episodes, False,
+                            train_gen.get_epoch())
             print("{}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f} ".format(
                 datetime.datetime.now().strftime('%02y/%02m/%02d %H:%M:%S'),
                 "ep", ep,
@@ -166,7 +168,7 @@ def train(train_data, val_data, model, args):
 
         # evaluate validation accuracy
         cur_acc, cur_std = test(val_data, model, args, args.val_episodes, False,
-                val_gen.get_epoch())
+                                val_gen.get_epoch())
         print(("{}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f} "
                "{:s} {:s}{:>7.4f}, {:s}{:>7.4f}").format(
                datetime.datetime.now().strftime('%02y/%02m/%02d %H:%M:%S'),
@@ -276,9 +278,6 @@ def train_one(task, fast, args, total_grad):
                                    fast_weights['clf'].values()),
                     create_graph=True)
 
-        if args.maml_firstorder:
-            grads = tuple([g.detach() for g in list(grads)])
-
         # update fast weight
         fast_weights['ebd'] = OrderedDict(
                 (name, param-args.maml_stepsize*grad) for ((name, param), grad)
@@ -308,6 +307,50 @@ def train_one(task, fast, args, total_grad):
     return
 
 
+def train_one_fomaml(task, fast, args, total_grad):
+    '''
+        Update the fast_model based on the support set.
+        Return the gradient w.r.t. initializations over the query set
+        First order MAML
+    '''
+    support, query = task
+
+    # map class label into 0,...,num_classes-1
+    YS, YQ = fast['clf'].reidx_y(support['label'], query['label'])
+
+    opt = torch.optim.SGD(grad_param(fast, ['ebd', 'clf']),
+                          lr=args.maml_stepsize)
+
+    fast['ebd'].train()
+    fast['clf'].train()
+
+    # fast adaptation
+    for i in range(args.maml_innersteps):
+        opt.zero_grad()
+
+        XS = fast['ebd'](support)
+        acc, loss = fast['clf'](XS, YS)
+
+        loss.backward()
+
+        opt.step()
+
+    # forward on the query, to get meta loss
+    XQ = fast['ebd'](query)
+    acc, loss = fast['clf'](XQ, YQ)
+
+    loss.backward()
+
+    grads_ebd = {name: p.grad for (name, p) in named_grad_param(fast, ['ebd'])\
+                 if p.grad is not None}  # pooler does not have grad in Bert
+    grads_clf = {name: p.grad for (name, p) in named_grad_param(fast, ['clf'])}
+
+    total_grad['ebd'].append(grads_ebd)
+    total_grad['clf'].append(grads_clf)
+
+    return
+
+
 def test(test_data, model, args, num_episodes, verbose=True, sampled_tasks=None):
     '''
         Evaluate the model on a bag of sampled tasks. Return the mean accuracy
@@ -324,11 +367,16 @@ def test(test_data, model, args, num_episodes, verbose=True, sampled_tasks=None)
                 test_data, args, num_episodes).get_epoch()
 
     acc = []
+
+    sampled_tasks = enumerate(sampled_tasks)
     if not args.notqdm:
         sampled_tasks = tqdm(sampled_tasks, total=num_episodes, ncols=80,
                 leave=False, desc=colored('Testing on val', 'yellow'))
 
-    for task in sampled_tasks:
+    for i, task in sampled_tasks:
+        if i == num_episodes and not args.notqdm:
+            sampled_tasks.close()
+            break
         _copy_weights(model['ebd'], fast_model['ebd'])
         _copy_weights(model['clf'], fast_model['clf'])
         acc.append(test_one(task, fast_model, args))
@@ -360,7 +408,7 @@ def test_one(task, fast, args):
     opt = torch.optim.SGD(grad_param(fast, ['ebd', 'clf']),
                           lr=args.maml_stepsize)
 
-    for i in range(args.maml_innersteps):
+    for i in range(args.maml_innersteps*2):
         XS = fast['ebd'](support)
         pred = fast['clf'](XS)
         loss = F.cross_entropy(pred, YS)

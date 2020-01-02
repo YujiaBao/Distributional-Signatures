@@ -14,7 +14,7 @@ from embedding.wordebd import WORDEBD
 import dataset.stats as stats
 from dataset.utils import tprint
 
-from pytorch_transformers import BertTokenizer
+from transformers import BertTokenizer
 
 
 def _get_20newsgroup_classes(args):
@@ -264,28 +264,60 @@ def _data_to_nparray(data, vocab, args):
     '''
         Convert the data into a dictionary of np arrays for speed.
     '''
-    # compute the max text length
-    text_len = np.array([len(e['text']) for e in data])
-    max_text_len = max(text_len)
-
-    # initialize the big numpy array by <pad>
-    text = vocab.stoi['<pad>'] * np.ones([len(data), max_text_len],
-                                         dtype=np.int64)
-
-    del_idx = []
-    # convert each token to its corresponding id
-    for i in range(len(data)):
-        text[i, :len(data[i]['text'])] = [
-                vocab.stoi[x] if x in vocab.stoi else vocab.stoi['<unk>']
-                for x in data[i]['text']]
-
-        # filter out document with only unk and pad
-        if np.max(text[i]) < 2:
-            del_idx.append(i)
-
     doc_label = np.array([x['label'] for x in data], dtype=np.int64)
 
     raw = np.array([e['text'] for e in data], dtype=object)
+
+    if args.bert:
+        tokenizer = BertTokenizer.from_pretrained(
+                'bert-base-uncased', do_lower_case=True)
+
+        # convert to wpe
+        vocab_size = 0  # record the maximum token id for computing idf
+        for e in data:
+            e['bert_id'] = tokenizer.encode(" ".join(e['text']),
+                                            add_special_tokens=True)
+                                            # max_length=80)
+            vocab_size = max(max(e['bert_id'])+1, vocab_size)
+
+        text_len = np.array([len(e['bert_id']) for e in data])
+        max_text_len = max(text_len)
+
+        text = np.zeros([len(data), max_text_len], dtype=np.int64)
+
+        del_idx = []
+        # convert each token to its corresponding id
+        for i in range(len(data)):
+            text[i, :len(data[i]['bert_id'])] = data[i]['bert_id']
+
+            # filter out document with only special tokens
+            # unk (100), cls (101), sep (102), pad (0)
+            if np.max(text[i]) < 103:
+                del_idx.append(i)
+
+        text_len = text_len
+
+    else:
+        # compute the max text length
+        text_len = np.array([len(e['text']) for e in data])
+        max_text_len = max(text_len)
+
+        # initialize the big numpy array by <pad>
+        text = vocab.stoi['<pad>'] * np.ones([len(data), max_text_len],
+                                         dtype=np.int64)
+
+        del_idx = []
+        # convert each token to its corresponding id
+        for i in range(len(data)):
+            text[i, :len(data[i]['text'])] = [
+                    vocab.stoi[x] if x in vocab.stoi else vocab.stoi['<unk>']
+                    for x in data[i]['text']]
+
+            # filter out document with only unk and pad
+            if np.max(text[i]) < 2:
+                del_idx.append(i)
+
+        vocab_size = vocab.vectors.size()[0]
 
     text_len, text, doc_label, raw = _del_by_idx(
             [text_len, text, doc_label, raw], del_idx, 0)
@@ -295,29 +327,8 @@ def _data_to_nparray(data, vocab, args):
         'text_len': text_len,
         'label': doc_label,
         'raw': raw,
-        'vocab_size': vocab.vectors.size()[0],
+        'vocab_size': vocab_size,
     }
-
-    if args.bert:
-        # convert tokens into bert id for bert computation
-        # max length is increased by 2 as we need to ad CLS and SEP
-        bert_id = np.zeros((len(data), max_text_len+2), dtype=np.int64)
-
-        tokenizer = BertTokenizer.from_pretrained(
-                'bert-base-uncased', do_lower_case=True)
-
-        # add CLS
-        bert_id[:,0] = tokenizer.convert_tokens_to_ids(['[CLS]'])[0]
-
-        # add ids (append [SEP])
-        sep = tokenizer.convert_tokens_to_ids(['[SEP]'])[0]
-        for i in range(len(data)):
-            bert_id[i, 1:1+len(data[i]['text'])] =\
-                tokenizer.convert_tokens_to_ids(data[i]['text'])
-            bert_id[i, 1+len(data[i]['text'])] = sep
-
-        bert_id = _del_by_idx([bert_id], del_idx, 0)
-        new_data['bert_id'] = bert_id
 
     if 'pos' in args.auxiliary:
         # use positional information in fewrel
@@ -433,6 +444,7 @@ def load_dataset(args):
     tprint('#train {}, #val {}, #test {}'.format(
         len(train_data), len(val_data), len(test_data)))
 
+
     # Convert everything into np array for fast data loading
     train_data = _data_to_nparray(train_data, vocab, args)
     val_data = _data_to_nparray(val_data, vocab, args)
@@ -446,9 +458,12 @@ def load_dataset(args):
     if args.meta_w_target:
         # augment meta model by the support features
         if args.bert:
-            ebd = CXTEBD()
+            ebd = CXTEBD(args.pretrained_bert,
+                         cache_dir=args.bert_cache_dir,
+                         finetune_ebd=False,
+                         return_seq=True)
         else:
-            ebd = WORDEBD(vocab)
+            ebd = WORDEBD(vocab, finetune_ebd=False)
 
         train_data['avg_ebd'] = AVG(ebd, args)
         if args.cuda != -1:

@@ -29,7 +29,7 @@ class IDF(nn.Module):
             @param weights placeholder used for maml
             @return output: batch_size * embedding_dim
         '''
-        ebd = self.ebd(data)
+        ebd = self.ebd(data, weights)
 
         if self.args.embedding == 'idf':
             score = F.embedding(data['text'], data['idf'])

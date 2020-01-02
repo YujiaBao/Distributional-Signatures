@@ -78,7 +78,7 @@ class CNN(nn.Module):
             @return output: batch_size * embedding_dim
         '''
         # Apply the word embedding, result:  batch_size, doc_len, embedding_dim
-        ebd = self.ebd(data)
+        ebd = self.ebd(data, weights)
 
         # add augmented embedding if applicable
         aux = self.aux(data, weights)

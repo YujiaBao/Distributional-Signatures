@@ -11,6 +11,7 @@ def train(train_data, val_data, model, args):
 
 
 def test(test_data, model, args, verbose=True):
+
     if args.maml:
         return maml.test(test_data, model, args, verbose)
     elif args.mode == 'finetune':

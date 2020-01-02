@@ -36,6 +36,7 @@ class MLP(BASE):
         super(MLP, self).__init__(args)
 
         self.ebd_dim = ebd_dim
+
         self.mlp = self._init_mlp(
                 ebd_dim, self.args.mlp_hidden, self.args.dropout)
 
@@ -87,6 +88,7 @@ class MLP(BASE):
 
         if self.top_layer is not None:
             XS = self.top_layer(XS)
+
 
         # normal training procedure, compute loss/acc
         if YS is not None:

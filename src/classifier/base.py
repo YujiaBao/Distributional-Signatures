@@ -11,6 +11,10 @@ class BASE(nn.Module):
         super(BASE, self).__init__()
         self.args = args
 
+        # cached tensor for speed
+        self.I_way = nn.Parameter(torch.eye(self.args.way, dtype=torch.float),
+                                  requires_grad=False)
+
     def _compute_l2(self, XS, XQ):
         '''
             Compute the pairwise l2 distance
@@ -94,6 +98,17 @@ class BASE(nn.Module):
             nn.Linear(in_d, hidden_ds[-1])])
 
         return nn.Sequential(*modules)
+
+    def _label2onehot(self, Y):
+        '''
+            Map the labels into 0,..., way
+            @param Y: batch_size
+
+            @return Y_onehot: batch_size * ways
+        '''
+        Y_onehot = F.embedding(Y, self.I_way)
+
+        return Y_onehot
 
     @staticmethod
     def compute_acc(pred, true):
