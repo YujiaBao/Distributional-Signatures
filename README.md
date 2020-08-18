@@ -68,3 +68,6 @@ Scripts for other baselines may be found under `bin/`.
 - pytorch-transformers 1.1.0
 - termcolor 1.1.0
 - tqdm 4.32.2
+
+### Mac OS
+As tryambak007 pointed out, there is an error when using multiprocessing.Queue. Please check out his fork (https://github.com/tryambak007/Distributional-Signatures) for the fix.
