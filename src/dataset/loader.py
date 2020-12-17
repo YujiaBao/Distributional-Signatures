@@ -275,9 +275,7 @@ def _data_to_nparray(data, vocab, args):
         # convert to wpe
         vocab_size = 0  # record the maximum token id for computing idf
         for e in data:
-            e['bert_id'] = tokenizer.encode(" ".join(e['text']),
-                                            add_special_tokens=True)
-                                            # max_length=80)
+            e['bert_id'] = tokenizer.convert_tokens_to_ids(['CLS'] + e['text'] + ['SEP'])
             vocab_size = max(max(e['bert_id'])+1, vocab_size)
 
         text_len = np.array([len(e['bert_id']) for e in data])
